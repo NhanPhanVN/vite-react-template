@@ -9,6 +9,26 @@ type ChatMessage = {
 	created_at: string;
 };
 
+type ConnectionStatus = "connecting" | "live" | "reconnecting";
+
+const MESSAGE_POLL_INTERVAL = 5000;
+
+async function readApiResponse<T>(
+	response: Response,
+): Promise<{ data?: T; error?: string }> {
+	const body = await response.text();
+	try {
+		return { data: JSON.parse(body) as T };
+	} catch {
+		if (!response.ok) {
+			return {
+				error: `Chat service error (${response.status}). The D1 migration may need to be applied.`,
+			};
+		}
+		throw new Error("Chat service returned an unexpected response.");
+	}
+}
+
 function App() {
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [username, setUsername] = useState("");
@@ -16,32 +36,61 @@ function App() {
 	const [loading, setLoading] = useState(true);
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState("");
+	const [connectionStatus, setConnectionStatus] =
+		useState<ConnectionStatus>("connecting");
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
-		async function loadMessages() {
+		let active = true;
+		let refreshing = false;
+
+		async function refreshMessages() {
+			if (refreshing) return;
+			refreshing = true;
+
 			try {
 				const response = await fetch("/api/messages");
-				const data = (await response.json()) as {
+				const result = await readApiResponse<{
 					messages?: ChatMessage[];
 					error?: string;
-				};
+				}>(response);
 				if (!response.ok) {
-					throw new Error(data.error ?? "Could not load messages.");
+					throw new Error(
+						result.data?.error ?? result.error ?? "Could not load messages.",
+					);
 				}
-				setMessages(data.messages ?? []);
+				const latestMessages = result.data?.messages ?? [];
+				if (active) {
+					setMessages((currentMessages) =>
+						mergeMessages(currentMessages, latestMessages),
+					);
+					setConnectionStatus("live");
+					setError("");
+				}
 			} catch (loadError) {
-				setError(
-					loadError instanceof Error
-						? loadError.message
-						: "Could not load messages.",
-				);
+				if (active) {
+					setConnectionStatus("reconnecting");
+					setError(
+						loadError instanceof Error
+							? loadError.message
+							: "Could not load messages.",
+					);
+				}
 			} finally {
-				setLoading(false);
+				refreshing = false;
+				if (active) setLoading(false);
 			}
 		}
 
-		void loadMessages();
+		void refreshMessages();
+		const intervalId = window.setInterval(
+			() => void refreshMessages(),
+			MESSAGE_POLL_INTERVAL,
+		);
+		return () => {
+			active = false;
+			window.clearInterval(intervalId);
+		};
 	}, []);
 
 	useEffect(() => {
@@ -65,14 +114,17 @@ function App() {
 					message: trimmedMessage,
 				}),
 			});
-			const data = (await response.json()) as {
+			const result = await readApiResponse<{
 				message?: ChatMessage;
 				error?: string;
-			};
-			const savedMessage = data.message;
-			if (!response.ok || !savedMessage) {
-				throw new Error(data.error ?? "Could not send your message.");
+			}>(response);
+			if (!response.ok) {
+				throw new Error(
+					result.data?.error ?? result.error ?? "Could not send your message.",
+				);
 			}
+			const savedMessage = result.data?.message;
+			if (!savedMessage) throw new Error("Could not send your message.");
 			setMessages((currentMessages) => [...currentMessages, savedMessage]);
 			setMessage("");
 		} catch (sendError) {
@@ -108,9 +160,13 @@ function App() {
 					</span>
 					<span>commonroom</span>
 				</a>
-				<div className="connection-status">
+				<div className={`connection-status ${connectionStatus}`}>
 					<span className="status-dot" />
-					Chat room
+					{connectionStatus === "live"
+						? "Live · refreshes every 5 sec"
+						: connectionStatus === "connecting"
+							? "Connecting"
+							: "Reconnecting"}
 				</div>
 			</header>
 
@@ -245,6 +301,31 @@ function App() {
 			</section>
 		</main>
 	);
+}
+
+function mergeMessages(
+	currentMessages: ChatMessage[],
+	latestMessages: ChatMessage[],
+) {
+	const messagesById = new Map(
+		currentMessages.map((chatMessage) => [chatMessage.id, chatMessage]),
+	);
+	for (const chatMessage of latestMessages) {
+		messagesById.set(chatMessage.id, chatMessage);
+	}
+
+	const mergedMessages = [...messagesById.values()]
+		.sort((first, second) => first.id - second.id)
+		.slice(-100);
+	if (
+		mergedMessages.length === currentMessages.length &&
+		mergedMessages.every(
+			(chatMessage, index) => chatMessage.id === currentMessages[index]?.id,
+		)
+	) {
+		return currentMessages;
+	}
+	return mergedMessages;
 }
 
 function formatTime(timestamp: string) {

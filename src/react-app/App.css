@@ -60,6 +60,16 @@
 	box-shadow: 0 0 0 3px #57a27620;
 }
 
+.connection-status.connecting .status-dot {
+	background: #d1a456;
+	box-shadow: 0 0 0 3px #d1a45620;
+}
+
+.connection-status.reconnecting .status-dot {
+	background: #cb6b5f;
+	box-shadow: 0 0 0 3px #cb6b5f20;
+}
+
 .chat-layout {
 	width: min(100%, 720px);
 	margin: 0 auto;

@@ -9,6 +9,17 @@ type ChatMessage = {
 
 const app = new Hono<{ Bindings: Env & { my_binding: D1Database } }>();
 
+app.onError((error, c) => {
+	console.error("Chat API request failed:", error);
+	return c.json(
+		{
+			error:
+				"Chat service could not access the database. Verify the D1 binding and apply migrations.",
+		},
+		500,
+	);
+});
+
 app.get("/api/messages", async (c) => {
 	const { results } = await c.env.my_binding
 		.prepare(
