@@ -56,6 +56,24 @@ npm run dev
 
 Your application will be available at [http://localhost:5173](http://localhost:5173).
 
+## Chat database
+
+Chat messages are stored in the D1 database configured in `wrangler.jsonc`. Apply
+the initial schema to the remote database before deploying or using the chat:
+
+```bash
+npx wrangler d1 migrations apply d1 --remote
+```
+
+To use the local development database instead, run:
+
+```bash
+npx wrangler d1 migrations apply d1 --local
+```
+
+The chat API returns the most recent 100 messages and accepts names up to 40
+characters and messages up to 1000 characters.
+
 ## Production
 
 Build your project for production:
