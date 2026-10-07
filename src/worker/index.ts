@@ -26,9 +26,98 @@ type EvidenceRow = {
 
 const app = new Hono<{ Bindings: Env & { my_binding: D1Database } }>();
 
+const PICRD_UPLOAD_URL = "https://picrd.com/api/upload";
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+	"image/png",
+	"image/jpeg",
+	"image/webp",
+	"image/gif",
+]);
+
 app.onError((error, c) => {
 	console.error("Shipping API request failed:", error);
 	return c.json({ error: "The shipping service is temporarily unavailable." }, 500);
+});
+
+app.post("/api/picrd/upload", async (c) => {
+	let form: FormData;
+	try {
+		form = await c.req.formData();
+	} catch {
+		return c.json({ error: "Upload a valid multipart form with an image file." }, 400);
+	}
+
+	const file = form.get("file");
+	if (!(file instanceof File)) {
+		return c.json({ error: "Choose an image file to upload." }, 400);
+	}
+	if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+		return c.json({ error: "Choose a PNG, JPEG, WebP, or GIF image." }, 400);
+	}
+	if (file.size === 0 || file.size > MAX_IMAGE_BYTES) {
+		return c.json({ error: "Images must be larger than 0 bytes and no more than 10 MB." }, 400);
+	}
+
+	const picrdForm = new FormData();
+	picrdForm.append("file", file, file.name);
+	picrdForm.append("visibility", "unlisted");
+
+	let picrdResponse: Response;
+	try {
+		picrdResponse = await fetch(PICRD_UPLOAD_URL, {
+			method: "POST",
+			body: picrdForm,
+		});
+	} catch (error) {
+		console.error("Picrd upload request failed:", error);
+		return c.json({ error: "Could not connect to Picrd. Please try again." }, 502);
+	}
+
+	const responseBody = await picrdResponse.text();
+	let upload: unknown;
+	try {
+		upload = JSON.parse(responseBody);
+	} catch {
+		console.error("Picrd returned a non-JSON upload response.");
+		return c.json({ error: "Picrd returned an invalid upload response." }, 502);
+	}
+
+	if (!picrdResponse.ok) {
+		const message = isRecord(upload)
+			? typeof upload.detail === "string"
+				? upload.detail
+				: typeof upload.error === "string"
+					? upload.error
+					: `Picrd rejected the upload (${picrdResponse.status}).`
+			: `Picrd rejected the upload (${picrdResponse.status}).`;
+		const status = picrdResponse.status === 429 ? 429 : 502;
+		return c.json({ error: message }, status);
+	}
+
+	if (
+		!isRecord(upload) ||
+		typeof upload.image_id !== "string" ||
+		typeof upload.image_url !== "string" ||
+		typeof upload.page_url !== "string" ||
+		typeof upload.delete_url !== "string" ||
+		!isPicrdUpload(
+			upload.image_id,
+			upload.image_url,
+			upload.page_url,
+			upload.delete_url,
+		)
+	) {
+		console.error("Picrd returned invalid image URLs.");
+		return c.json({ error: "Picrd returned invalid image details." }, 502);
+	}
+
+	return c.json({
+		image_id: upload.image_id,
+		image_url: upload.image_url,
+		page_url: upload.page_url,
+		delete_url: upload.delete_url,
+	});
 });
 
 app.get("/api/shipments", async (c) => {

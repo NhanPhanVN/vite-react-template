@@ -68,11 +68,11 @@ npx wrangler d1 migrations apply d1 --remote --config wrangler.jsonc
 The shipping migration replaces the old chat table and **drops its messages**.
 This is irreversible for databases where that migration is applied.
 
-The browser uploads image files directly to Picrd; the Worker only stores the
-returned image, page, and delete URLs. Picrd must allow browser CORS for your
-site origin on `POST https://picrd.com/api/upload`. Until Picrd enables that,
-direct uploads from the deployed site will be blocked by the browser. Images
-must be PNG, JPEG, WebP, or GIF and no larger than 10 MB.
+The browser sends image uploads to the Worker, which forwards them to Picrd and
+returns Picrd's image, page, and delete URLs. Image bytes are not stored in D1.
+Uploads must be PNG, JPEG, WebP, or GIF and no larger than 10 MB. Picrd applies
+a limit of 60 uploads per hour per IP; proxied uploads may share the Worker's
+outbound IP limit.
 
 Each shipment has one share link. Anyone with it can view the record, upload
 photos into the sender/receiver front/back slots, or remove photos. Photo

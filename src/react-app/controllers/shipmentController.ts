@@ -7,7 +7,6 @@ import type {
 	ShipmentStatus,
 } from "../models/shipment";
 
-const PICRD_UPLOAD_URL = "https://picrd.com/api/upload";
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
 	"image/png",
@@ -121,17 +120,16 @@ export async function uploadEvidenceImage(file: File): Promise<PicrdUpload> {
 
 	const formData = new FormData();
 	formData.append("file", file);
-	formData.append("visibility", "unlisted");
 
 	let response: Response;
 	try {
-		response = await fetch(PICRD_UPLOAD_URL, {
+		response = await fetch("/api/picrd/upload", {
 			method: "POST",
 			body: formData,
 		});
 	} catch {
 		throw new Error(
-			"Picrd is blocking browser uploads because CORS is not enabled for this site. Ask Picrd to allow your site origin on POST /api/upload, then try again.",
+			"The upload request could not reach the shipping service. Check your connection and try again.",
 		);
 	}
 

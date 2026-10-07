@@ -496,7 +496,7 @@ function ShipmentView({ shipmentId }: { shipmentId: string }) {
 																		<span className="loader" aria-hidden="true" />
 																		<span className="upload-main">Uploading…</span>
 																		<span className="upload-sub">
-																			Sending directly to Picrd
+																			Forwarding securely to Picrd
 																		</span>
 																	</>
 																) : (
