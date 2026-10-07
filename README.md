@@ -56,23 +56,41 @@ npm run dev
 
 Your application will be available at [http://localhost:5173](http://localhost:5173).
 
-## Chat database
+## Shipping records
 
-Chat messages are stored in the D1 database configured in `wrangler.jsonc`. Apply
-the initial schema to the remote database before deploying or using the chat:
+Shipping records and Picrd image URLs are stored in the D1 database configured
+in `wrangler.jsonc`. Apply the migrations to the remote database before deploying:
 
 ```bash
-npx wrangler d1 migrations apply d1 --remote
+npx wrangler d1 migrations apply d1 --remote --config wrangler.jsonc
 ```
+
+The shipping migration replaces the old chat table and **drops its messages**.
+This is irreversible for databases where that migration is applied.
+
+The browser uploads image files directly to Picrd; the Worker only stores the
+returned image, page, and delete URLs. Picrd must allow browser CORS for your
+site origin on `POST https://picrd.com/api/upload`. Until Picrd enables that,
+direct uploads from the deployed site will be blocked by the browser. Images
+must be PNG, JPEG, WebP, or GIF and no larger than 10 MB.
+
+Each shipment has one share link. Anyone with it can view the record, upload
+photos into the sender/receiver front/back slots, or remove photos. Photo
+deletion opens Picrd's confirmation page; after confirming there, remove the
+photo from the shipment record.
+
+The home page lists all shipments, including the receiver, shipped date, and a
+red days-waiting badge until receipt is confirmed. Each record's status can be
+changed from the list or shipment page: Shipped, On the way, or Return. The
+receiver can confirm delivery on the shipment page. Shipment lists and detail
+pages refresh once per second. Share dialogs show the current site's full URL,
+a copy button, and a QR code.
 
 To use the local development database instead, run:
 
 ```bash
-npx wrangler d1 migrations apply d1 --local
+npx wrangler d1 migrations apply d1 --local --config wrangler.jsonc
 ```
-
-The chat API returns the most recent 100 messages and accepts names up to 40
-characters and messages up to 1000 characters.
 
 ## Production
 
